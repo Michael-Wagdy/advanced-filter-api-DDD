@@ -1,0 +1,181 @@
+### ============================================================
+### Advanced Filter API - HTTP Client Test Workspace
+### ============================================================
+### Base URL
+### @baseUrl = http://localhost:8000
+
+### ============================================================
+### 1. BASELINE QUERIES - Paginated Results
+### ============================================================
+
+### Fetch all articles (default pagination)
+GET {{baseUrl}}/api/v1/blog/articles
+Accept: application/json
+
+### Fetch articles with custom pagination
+GET {{baseUrl}}/api/v1/blog/articles?per_page=5
+Accept: application/json
+
+### Fetch page 2 of articles
+GET {{baseUrl}}/api/v1/blog/articles?per_page=10
+Accept: application/json
+
+### Fetch all categories
+GET {{baseUrl}}/api/v1/blog/categories
+Accept: application/json
+
+### Fetch categories with pagination
+GET {{baseUrl}}/api/v1/blog/categories?per_page=10
+Accept: application/json
+
+### Fetch all tags
+GET {{baseUrl}}/api/v1/blog/tags
+Accept: application/json
+
+### Fetch tags with pagination
+GET {{baseUrl}}/api/v1/blog/tags?per_page=25
+Accept: application/json
+
+### ============================================================
+### 2. ADVANCED DIRECT FIELD FILTERING
+### ============================================================
+
+### Filter articles by exact status (published)
+GET {{baseUrl}}/api/v1/blog/articles?filter[status][eq]=published
+Accept: application/json
+
+### Filter articles by status (draft)
+GET {{baseUrl}}/api/v1/blog/articles?filter[status][eq]=draft
+Accept: application/json
+
+### Filter articles by LIKE title
+GET {{baseUrl}}/api/v1/blog/articles?filter[title][like]=laravel
+Accept: application/json
+
+### Filter articles by view count > 1000
+GET {{baseUrl}}/api/v1/blog/articles?filter[view_count][gt]=1000
+Accept: application/json
+
+### Filter articles by view count between 500 and 5000
+GET {{baseUrl}}/api/v1/blog/articles?filter[view_count][gte]=500&filter[view_count][lte]=5000
+Accept: application/json
+
+### Filter articles by view count <= 100
+GET {{baseUrl}}/api/v1/blog/articles?filter[view_count][lte]=100
+Accept: application/json
+
+### Filter articles where status is empty (null)
+GET {{baseUrl}}/api/v1/blog/articles?filter[status][empty]=true
+Accept: application/json
+
+### Filter articles where status is filled (not null)
+GET {{baseUrl}}/api/v1/blog/articles?filter[status][filled]=true
+Accept: application/json
+
+### Filter articles by multiple statuses (in)
+GET {{baseUrl}}/api/v1/blog/articles?filter[status][in]=published,draft
+Accept: application/json
+
+### Full-text global search on articles
+GET {{baseUrl}}/api/v1/blog/articles?search=laravel
+Accept: application/json
+
+### Full-text global search for a common term
+GET {{baseUrl}}/api/v1/blog/articles?search=testing
+Accept: application/json
+
+### Sort articles by view count descending
+GET {{baseUrl}}/api/v1/blog/articles?sort=-view_count
+Accept: application/json
+
+### Sort articles by title ascending
+GET {{baseUrl}}/api/v1/blog/articles?sort=title
+Accept: application/json
+
+### Sort articles by created_at descending
+GET {{baseUrl}}/api/v1/blog/articles?sort=-created_at
+Accept: application/json
+
+### Filter categories by exact name
+GET {{baseUrl}}/api/v1/blog/categories?filter[name][eq]=Technology
+Accept: application/json
+
+### Filter categories by LIKE name
+GET {{baseUrl}}/api/v1/blog/categories?filter[name][like]=tech
+Accept: application/json
+
+### Filter categories by is_active
+GET {{baseUrl}}/api/v1/blog/categories?filter[is_active][eq]=1
+Accept: application/json
+
+### Search categories globally
+GET {{baseUrl}}/api/v1/blog/categories?search=science
+Accept: application/json
+
+### Sort categories descending
+GET {{baseUrl}}/api/v1/blog/categories?sort=-name
+Accept: application/json
+
+### Filter tags by exact name
+GET {{baseUrl}}/api/v1/blog/tags?filter[name][eq]=php
+Accept: application/json
+
+### Filter tags by LIKE name
+GET {{baseUrl}}/api/v1/blog/tags?filter[name][like]=java
+Accept: application/json
+
+### Search tags globally
+GET {{baseUrl}}/api/v1/blog/tags?search=framework
+Accept: application/json
+
+### Sort tags ascending
+GET {{baseUrl}}/api/v1/blog/tags?sort=name
+Accept: application/json
+
+### ============================================================
+### 3. RELATIONSHIP FILTERING
+### ============================================================
+
+### Filter articles by category slug (exact)
+GET {{baseUrl}}/api/v1/blog/articles?filter[category][slug][eq]=technology
+Accept: application/json
+
+### Filter articles by category name (LIKE)
+GET {{baseUrl}}/api/v1/blog/articles?filter[category][name][like]=science
+Accept: application/json
+
+### Filter articles by tag name
+GET {{baseUrl}}/api/v1/blog/articles?filter[tags][name][like]=php
+Accept: application/json
+
+### Filter articles by tag slug
+GET {{baseUrl}}/api/v1/blog/articles?filter[tags][slug][eq]=laravel
+Accept: application/json
+
+### Filter articles by author name
+GET {{baseUrl}}/api/v1/blog/articles?filter[user][name][like]=john
+Accept: application/json
+
+### ============================================================
+### 4. DEEP NESTED RELATIONSHIP FILTERING
+### ============================================================
+
+### Filter articles by comment author name
+GET {{baseUrl}}/api/v1/blog/articles?filter[comments][user][name][like]=john
+Accept: application/json
+
+### ============================================================
+### 5. COMBINED FILTERS
+### ============================================================
+
+### Filter published articles in a specific category, sorted
+GET {{baseUrl}}/api/v1/blog/articles?filter[status][eq]=published&filter[category][slug][eq]=technology&sort=-view_count&per_page=5
+Accept: application/json
+
+### Search + filter + sort combination
+GET {{baseUrl}}/api/v1/blog/articles?search=php&filter[status][eq]=published&sort=-created_at&per_page=10
+Accept: application/json
+
+### Multi-condition field filter with relation
+GET {{baseUrl}}/api/v1/blog/articles?filter[view_count][gte]=100&filter[view_count][lte]=5000&filter[category][name][like]=tech&sort=title
+Accept: application/json
