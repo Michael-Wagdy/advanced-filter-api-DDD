@@ -18,6 +18,7 @@ class CategoryEloquentRepository implements CategoryRepositoryInterface
 
         $result = $builder
             ->whereFieldFilters($filters['filter'] ?? [], $builder->getRelationFields())
+            ->whereRelationFilters($filters['filter'] ?? [])
             ->whereSearch($filters['search'] ?? '', $builder->getSearchableColumns())
             ->applySort($filters['sort'] ?? null);
 

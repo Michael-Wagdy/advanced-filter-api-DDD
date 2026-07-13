@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\DB;
 
 class FilterableBuilder extends Builder
 {
-    private array $joinedTables = [];
+    private array $joinedPaths = [];
+
+    private bool $hasRelationJoin = false;
 
     public const ALLOWED_OPERATORS = [
         'like' => 'LIKE',
@@ -70,6 +72,11 @@ class FilterableBuilder extends Builder
             }
         }
 
+        if ($this->hasRelationJoin) {
+            $table = $this->getModel()->getTable();
+            $this->select("{$table}.*")->distinct();
+        }
+
         return $this;
     }
 
@@ -123,14 +130,16 @@ class FilterableBuilder extends Builder
 
         $currentModel = $model;
         $lastAlias = null;
+        $traversedPath = [];
 
         foreach ($segments as $segment) {
             if (!method_exists($currentModel, $segment)) {
                 break;
             }
 
+            $traversedPath[] = $segment;
             $relation = $currentModel->{$segment}();
-            $lastAlias = $this->joinRelation($relation, $currentModel);
+            $lastAlias = $this->joinRelation($relation, $currentModel, implode('.', $traversedPath));
             $currentModel = $relation->getRelated();
         }
 
@@ -148,13 +157,13 @@ class FilterableBuilder extends Builder
     private function applyNestedFilter(string $relationName, array $conditions, Model $model): void
     {
         $relation = $model->{$relationName}();
-        $alias = $this->joinRelation($relation, $model);
+        $alias = $this->joinRelation($relation, $model, $relationName);
         $related = $relation->getRelated();
 
-        $this->processBranch($conditions, $related, $alias);
+        $this->processBranch($conditions, $related, $alias, $relationName);
     }
 
-    private function processBranch(array $conditions, Model $model, string $parentAlias): void
+    private function processBranch(array $conditions, Model $model, string $parentAlias, string $parentPath): void
     {
         foreach ($conditions as $key => $value) {
             if (!is_array($value)) {
@@ -163,9 +172,10 @@ class FilterableBuilder extends Builder
 
             if (method_exists($model, $key)) {
                 $relation = $model->{$key}();
-                $alias = $this->joinRelation($relation, $model);
+                $fullPath = "{$parentPath}.{$key}";
+                $alias = $this->joinRelation($relation, $model, $fullPath);
                 $nested = $relation->getRelated();
-                $this->processBranch($value, $nested, $alias);
+                $this->processBranch($value, $nested, $alias, $fullPath);
             } else {
                 $qualifiedField = "{$parentAlias}.{$key}";
                 foreach ($value as $operator => $operand) {
@@ -178,13 +188,14 @@ class FilterableBuilder extends Builder
         }
     }
 
-    private function joinRelation(Relation $relation, Model $parent): string
+    private function joinRelation(Relation $relation, Model $parent, string $relationPath): string
     {
-        $relatedTable = $relation->getRelated()->getTable();
-
-        if (in_array($relatedTable, $this->joinedTables)) {
-            return $relatedTable;
+        if (isset($this->joinedPaths[$relationPath])) {
+            return $this->joinedPaths[$relationPath];
         }
+
+        $relatedTable = $relation->getRelated()->getTable();
+        $alias = $this->resolveTableAlias($relatedTable, $relationPath);
 
         $parentTable = $parent->getTable();
 
@@ -193,8 +204,8 @@ class FilterableBuilder extends Builder
             $ownerKey = $relation->getOwnerKeyName();
 
             $this->join(
-                $relatedTable,
-                "{$relatedTable}.{$ownerKey}",
+                "{$relatedTable} as {$alias}",
+                "{$alias}.{$ownerKey}",
                 '=',
                 "{$parentTable}.{$foreignKey}"
             );
@@ -203,8 +214,8 @@ class FilterableBuilder extends Builder
             $localKey = $relation->getLocalKeyName();
 
             $this->join(
-                $relatedTable,
-                "{$relatedTable}.{$foreignKey}",
+                "{$relatedTable} as {$alias}",
+                "{$alias}.{$foreignKey}",
                 '=',
                 "{$parentTable}.{$localKey}"
             );
@@ -224,22 +235,34 @@ class FilterableBuilder extends Builder
             $relatedKeyName = $relation->getRelatedKeyName();
 
             $this->join(
-                $relatedTable,
-                "{$relatedTable}.{$relatedKeyName}",
+                "{$relatedTable} as {$alias}",
+                "{$alias}.{$relatedKeyName}",
                 '=',
                 "{$pivotTable}.{$relatedPivotKey}"
             );
         }
 
-        $this->joinedTables[] = $relatedTable;
+        $this->joinedPaths[$relationPath] = $alias;
+        $this->hasRelationJoin = true;
 
-        return $relatedTable;
+        return $alias;
+    }
+
+    private function resolveTableAlias(string $table, string $relationPath): string
+    {
+        $isFirstJoinForTable = !in_array($table, array_values($this->joinedPaths));
+
+        if ($isFirstJoinForTable) {
+            return $table;
+        }
+
+        return $table . '_' . str_replace('.', '_', $relationPath);
     }
 
     private function applyOperator(string $column, string $operator, mixed $value): void
     {
         match ($operator) {
-            'like' => $this->where($column, 'LIKE', "{$value}%"),
+            'like' => $this->where($column, 'LIKE', "%{$value}%"),
             'empty' => $this->whereNull($column),
             'filled' => $this->whereNotNull($column),
             'in' => $this->whereIn($column, is_array($value) ? $value : explode(',', $value)),

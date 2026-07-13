@@ -278,4 +278,222 @@ class ArticleFilterTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.title', 'Laravel Advanced Filtering Guide');
     }
+
+    public function test_relation_filter_no_duplicate_rows_with_multiple_matching_tags(): void
+    {
+        $this->articles[1]->tags()->attach([$this->tags[1]->id]);
+
+        $response = $this->getJson(self::ENDPOINT . '?filter[tags][name][eq]=Eloquent');
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.total', 2);
+    }
+
+    public function test_like_operator_matches_mid_string(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[title][like]=Filtering');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Laravel Advanced Filtering Guide');
+    }
+
+    public function test_combined_author_and_commenter_filter_different_users(): void
+    {
+        $author = User::factory()->create(['name' => 'Michael Author']);
+        $commenter = User::factory()->create(['name' => 'Jane Reader']);
+
+        $article = Article::factory()->create([
+            'user_id' => $author->id,
+            'category_id' => $this->category->id,
+            'title' => 'Author and Commenter Test Article',
+            'slug' => 'author-commenter-test',
+            'status' => 'published',
+            'view_count' => 500,
+        ]);
+
+        Comment::factory()->create([
+            'article_id' => $article->id,
+            'user_id' => $commenter->id,
+            'body' => 'Nice testing tips!',
+        ]);
+
+        $response = $this->getJson(self::ENDPOINT . '?filter[user.name][like]=Michael&filter[comments.user.name][like]=Jane');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Author and Commenter Test Article');
+    }
+
+    public function test_filter_empty_on_non_nullable_column_returns_no_results(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[body][empty]=1');
+
+        $response->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    public function test_filter_filled_on_non_nullable_column_returns_all(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[body][filled]=1');
+
+        $response->assertOk()
+            ->assertJsonCount(3, 'data');
+    }
+
+    public function test_filter_filled_combined_with_status_filter(): void
+    {
+        $this->articles[1]->update(['excerpt' => null]);
+
+        $response = $this->getJson(self::ENDPOINT . '?filter[excerpt][filled]=1&filter[status][eq]=published');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Laravel Advanced Filtering Guide');
+    }
+
+    public function test_filter_in_single_value_matches_eq_behavior(): void
+    {
+        $responseIn = $this->getJson(self::ENDPOINT . '?filter[status][in]=published');
+        $responseEq = $this->getJson(self::ENDPOINT . '?filter[status][eq]=published');
+
+        $responseIn->assertOk();
+        $responseEq->assertOk();
+
+        $this->assertEquals(
+            collect($responseIn->json('data'))->pluck('id')->values()->all(),
+            collect($responseEq->json('data'))->pluck('id')->values()->all(),
+        );
+    }
+
+    public function test_filter_in_on_view_count_column(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[view_count][in]=1500,3200');
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        $titles = array_column($response->json('data'), 'title');
+        $this->assertContains('Laravel Advanced Filtering Guide', $titles);
+        $this->assertContains('PHP Testing Best Practices', $titles);
+        $this->assertNotContains('JavaScript Fundamentals', $titles);
+    }
+
+    public function test_filter_in_with_relation_filter_combined(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[status][in]=published,draft&filter[category][slug][eq]=laravel');
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.total', 2);
+
+        $titles = array_column($response->json('data'), 'title');
+        $this->assertContains('Laravel Advanced Filtering Guide', $titles);
+        $this->assertContains('PHP Testing Best Practices', $titles);
+    }
+
+    public function test_filter_articles_by_created_at_lt(): void
+    {
+        $oldDate = now()->subDays(10)->toDateTimeString();
+        \Illuminate\Support\Facades\DB::table('articles')
+            ->where('id', $this->articles[0]->id)
+            ->update(['created_at' => $oldDate]);
+
+        $cutoff = now()->subDays(5)->toDateTimeString();
+        $response = $this->getJson(self::ENDPOINT . '?filter[created_at][lt]=' . $cutoff);
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Laravel Advanced Filtering Guide');
+    }
+
+    public function test_filter_articles_by_created_at_lte(): void
+    {
+        $exactDate = now()->subDays(3)->startOfDay()->toDateTimeString();
+        \Illuminate\Support\Facades\DB::table('articles')
+            ->where('id', $this->articles[0]->id)
+            ->update(['created_at' => $exactDate]);
+
+        $response = $this->getJson(self::ENDPOINT . '?filter[created_at][lte]=' . $exactDate);
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Laravel Advanced Filtering Guide');
+    }
+
+    public function test_filter_articles_by_exact_created_at(): void
+    {
+        $exactDate = '2024-06-15 10:30:00';
+        \Illuminate\Support\Facades\DB::table('articles')
+            ->where('id', $this->articles[1]->id)
+            ->update(['created_at' => $exactDate]);
+
+        $response = $this->getJson(self::ENDPOINT . '?filter[created_at][eq]=' . $exactDate);
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'PHP Testing Best Practices');
+    }
+
+    public function test_filter_nested_comment_user_name_exact_match(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[comments][user][name][eq]=John Commenter');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Laravel Advanced Filtering Guide');
+    }
+
+    public function test_filter_nested_multiple_conditions_same_level(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[comments][body][like]=Great&filter[comments][user][name][like]=John');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Laravel Advanced Filtering Guide');
+    }
+
+    public function test_filter_nested_relation_combined_with_field_filter(): void
+    {
+        $author = User::factory()->create(['name' => 'Target Author']);
+        $otherAuthor = User::factory()->create(['name' => 'Other Author']);
+        $commenter = User::factory()->create(['name' => 'Target Commenter']);
+
+        $publishedArticle = Article::factory()->create([
+            'user_id' => $author->id,
+            'category_id' => $this->category->id,
+            'title' => 'Published With Target Commenter',
+            'slug' => 'published-target-commenter',
+            'status' => 'published',
+            'view_count' => 999,
+        ]);
+
+        Comment::factory()->create([
+            'article_id' => $publishedArticle->id,
+            'user_id' => $commenter->id,
+            'body' => 'Target comment here',
+        ]);
+
+        $draftArticle = Article::factory()->create([
+            'user_id' => $otherAuthor->id,
+            'category_id' => $this->category->id,
+            'title' => 'Draft With Target Commenter',
+            'slug' => 'draft-target-commenter',
+            'status' => 'draft',
+            'view_count' => 100,
+        ]);
+
+        Comment::factory()->create([
+            'article_id' => $draftArticle->id,
+            'user_id' => $commenter->id,
+            'body' => 'Another target comment',
+        ]);
+
+        $response = $this->getJson(self::ENDPOINT . '?filter[status][eq]=published&filter[comments][user][name][like]=Target');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Published With Target Commenter');
+    }
 }

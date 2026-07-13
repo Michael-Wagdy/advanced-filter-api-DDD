@@ -33,12 +33,14 @@ class TagFilterTest extends TestCase
         $article1 = Article::factory()->create([
             'category_id' => $this->category->id,
             'user_id' => $this->user->id,
+            'status' => 'published',
         ]);
         $article1->tags()->attach([$this->tags[0]->id, $this->tags[1]->id]);
 
         $article2 = Article::factory()->create([
             'category_id' => $this->category->id,
             'user_id' => $this->user->id,
+            'status' => 'published',
         ]);
         $article2->tags()->attach([$this->tags[2]->id]);
     }
@@ -111,5 +113,37 @@ class TagFilterTest extends TestCase
         $response->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.name', 'Eloquent');
+    }
+
+    public function test_filter_tags_by_relation_article_status_nested(): void
+    {
+        $archivedTag = Tag::factory()->create(['name' => 'Archived Only', 'slug' => 'archived-only']);
+        $article = Article::factory()->create([
+            'category_id' => $this->category->id,
+            'user_id' => $this->user->id,
+            'status' => 'archived',
+        ]);
+        $article->tags()->attach([$archivedTag->id]);
+
+        $response = $this->getJson(self::ENDPOINT . '?filter[articles][status][eq]=published');
+
+        $response->assertOk()
+            ->assertJsonCount(3, 'data');
+    }
+
+    public function test_filter_tags_by_relation_article_status_dot_notation(): void
+    {
+        $archivedTag = Tag::factory()->create(['name' => 'Archived Only', 'slug' => 'archived-only']);
+        $article = Article::factory()->create([
+            'category_id' => $this->category->id,
+            'user_id' => $this->user->id,
+            'status' => 'archived',
+        ]);
+        $article->tags()->attach([$archivedTag->id]);
+
+        $response = $this->getJson(self::ENDPOINT . '?filter[articles.status][eq]=published');
+
+        $response->assertOk()
+            ->assertJsonCount(3, 'data');
     }
 }

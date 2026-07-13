@@ -121,4 +121,20 @@ class CategoryFilterTest extends TestCase
 
         $this->assertEquals(5, $laravelCategory['articles_count']);
     }
+
+    public function test_filter_categories_by_relation_article_status_nested(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[articles][status][eq]=published');
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data');
+    }
+
+    public function test_filter_categories_by_relation_article_status_dot_notation(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[articles.status][eq]=published');
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data');
+    }
 }

@@ -1,11 +1,11 @@
 # Advanced Filter API
 
-A production-grade Laravel 13 application implementing an Advanced Filtering System using strict Domain-Driven Design (DDD), the Pipeline pattern, and modular architecture via `nwidart/laravel-modules`.
+A production-grade Laravel 13 application implementing an Advanced Filtering System using strict Domain-Driven Design (DDD), a `FilterableBuilder` query layer, and modular architecture via `nwidart/laravel-modules`.
 
 Two modules:
 
 - **Blog** — Articles, Categories, Tags with relationships and list APIs.
-- **Shared** — Reusable filter pipes, middleware, and cross-cutting infrastructure used by all modules.
+- **Shared** — Reusable `FilterableBuilder`, query builders, middleware, and cross-cutting infrastructure used by all modules.
 
 ---
 
@@ -14,54 +14,69 @@ Two modules:
 ### DDD Layer Separation
 
 ```
-Modules/Shared/                       ← Shared Infrastructure
+Modules/Shared/                               ← Shared Infrastructure
 ├── app/
-│   ├── Http/Middleware/              ← Cross-cutting concerns (PerformanceTelemetry)
-│   └── Infrastructure/FilterPipes/  ← Reusable Pipeline filter classes
-│       ├── FieldFilter.php
-│       ├── RelationFilter.php
-│       ├── SearchFilter.php
-│       ├── SortFilter.php
-│       └── PaginationFilter.php
-└── Providers/                        ← Module service provider
+│   ├── Http/Middleware/                      ← Cross-cutting concerns (PerformanceTelemetry)
+│   └── Infrastructure/QueryBuilders/
+│       └── FilterableBuilder.php             ← Base query builder with JOIN-based filtering
+└── Providers/                                ← Module service provider
 
-Modules/Blog/                         ← Domain Module
+Modules/Blog/                                 ← Domain Module
 ├── app/
-│   ├── Http/                         ← Application Layer
-│   │   ├── Controllers/Blog/         ← Orchestration only
-│   │   └── Resources/               ← Outbound JSON transformation
-│   ├── Domain/                       ← Domain Layer
-│   │   ├── Services/                 ← Business logic orchestration
-│   │   └── Repositories/             ← Abstract contracts (interfaces)
-│   └── Infrastructure/               ← Infrastructure Layer
+│   ├── Http/                                 ← Application Layer
+│   │   ├── Controllers/Blog/                 ← Orchestration only (uses Form Requests)
+│   │   ├── Requests/                         ← Input validation (FilterArticlesRequest, etc.)
+│   │   └── Resources/                       ← Outbound JSON transformation
+│   ├── Domain/                               ← Domain Layer
+│   │   ├── DTOs/                             ← FilterResult DTO (boundary object)
+│   │   ├── Services/                         ← Business logic orchestration
+│   │   └── Repositories/                     ← Abstract contracts (interfaces)
+│   └── Infrastructure/                       ← Infrastructure Layer
 │       └── Eloquent/
-│           ├── Models/               ← Skinny Eloquent models
-│           └── Repositories/         ← Concrete query implementations
+│           ├── Models/                       ← Skinny Eloquent models (override newEloquentBuilder)
+│           ├── QueryBuilders/                ← Model-specific query builders
+│           └── Repositories/                 ← Concrete query implementations
 ├── database/
-│   ├── factories/                    ← SRP: one factory per entity
-│   ├── migrations/                   ← Schema + composite/fulltext indexes
-│   └── seeders/                      ← High-speed bulk insert seeder
-└── tests/Feature/                    ← Integration tests
+│   ├── factories/                            ← SRP: one factory per entity
+│   ├── migrations/                           ← Schema + composite/fulltext indexes
+│   └── seeders/                              ← High-speed bulk insert seeder
+└── tests/Feature/                            ← Integration tests
 ```
 
-### Pipeline Filter Architecture
+### FilterableBuilder Architecture
 
-Requests flow through a composable pipeline of filter pipes:
+Requests flow through model-specific query builders that extend `FilterableBuilder`:
 
 ```
-HTTP Request → Controller → Domain Service → Repository → Pipeline:
-  ┌──────────┐   ┌──────────────┐   ┌────────────┐   ┌─────────────┐   ┌────────┐
-  │FieldFilter│ → │RelationFilter│ → │SearchFilter│ → │SortFilter   │ → │ Paginate│
-  └──────────┘   └──────────────┘   └────────────┘   └─────────────┘   └────────┘
+HTTP Request → Controller (Form Request validates input)
+  → Domain Service → Repository → FilterableBuilder chain:
+    ┌──────────────────────┐
+    │ FilterableBuilder     │  ← Base: JOIN-based filtering, search, sort
+    │   ├── whereFieldFilters()      ← Direct column filters
+    │   ├── whereRelationFilters()   ← Nested/dot-notation relation JOINs
+    │   ├── whereSearch()            ← Full-text (MySQL) or LIKE fallback (SQLite)
+    │   └── applySort()             ← Directional sorting
+    └──────────────────────┘
+    │
+    ▼
+  FilterResult DTO → Controller → JSON Response
 ```
 
-Each pipe receives an `Illuminate\Database\Eloquent\Builder`, applies its transformation, and passes it forward via `Closure $next`.
+Each model overrides `newEloquentBuilder()` to return its specific query builder:
+
+```php
+// Article model
+public function newEloquentBuilder($query): Builder
+{
+    return new ArticleQueryBuilder($query);
+}
+```
 
 ### Supported Filter Operators
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `like` | Text matching (LIKE %val%) | `filter[title][like]=laravel` |
+| `like` | Text matching (LIKE val%) | `filter[title][like]=laravel` |
 | `eq` | Exact match | `filter[status][eq]=published` |
 | `neq` | Not equal | `filter[status][neq]=draft` |
 | `gt` / `gte` | Greater than (or equal) | `filter[view_count][gt]=1000` |
@@ -130,19 +145,26 @@ php artisan db:seed --class=Modules\\Blog\\Database\\Seeders\\BlogDatabaseSeeder
 **Composite Indexes** (prevent full table scans on common filter combinations):
 
 ```sql
--- Articles table
-INDEX idx_status_created    ON articles (status, created_at)
-INDEX idx_category_status   ON articles (category_id, status)
-INDEX idx_user_created      ON articles (user_id, created_at)
-INDEX idx_view_count        ON articles (view_count)
+-- Articles table: optimized for the most common query patterns
+INDEX idx_status_created    ON articles (status, created_at)   -- status filter + date sort
+INDEX idx_category_status   ON articles (category_id, status)  -- category filter + status filter
+INDEX idx_user_created      ON articles (user_id, created_at)  -- author filter + date sort
+INDEX idx_view_count        ON articles (view_count)           -- numeric range filters
 
--- Pivot table
+-- Pivot table: primary key prevents duplicates in JOINs
 PRIMARY KEY (article_id, tag_id) ON article_tag
 
 -- Comments table
-INDEX idx_article_created   ON comments (article_id, created_at)
-INDEX idx_user_id           ON comments (user_id)
+INDEX idx_article_created   ON comments (article_id, created_at) -- article's comments + date sort
+INDEX idx_user_id           ON comments (user_id)               -- comment author filter
 ```
+
+**Why these indexes matter:**
+
+- `status + created_at`: When filtering `status=published` and sorting by date, MySQL can satisfy both from the index without touching the table.
+- `category_id + status`: The most common admin query — "show me published articles in this category."
+- `article_tag` composite PK: Prevents duplicate tag assignments and makes BelongsToMany JOINs efficient.
+- `view_count`: Numeric range filters (`gt`, `lt`) benefit from B-tree index lookups.
 
 **Full-Text Indexes** (MySQL/MariaDB):
 
@@ -150,28 +172,69 @@ INDEX idx_user_id           ON comments (user_id)
 ALTER TABLE articles ADD FULLTEXT INDEX ft_articles_title_body (title, body);
 ```
 
-SQLite environments automatically fall back to `LIKE '%term%'` in the `SearchFilter`.
+SQLite environments automatically fall back to `LIKE '%term%'` in the `FilterableBuilder::whereSearch()` method.
 
 ### Pagination Protection
 
 - Maximum `per_page` capped at 100 to prevent unbounded memory allocation
 - Default pagination at 15 records per page
-- All queries use `LENGTHAwarePaginator` for efficient offset-based pagination
+- All queries use `LengthAwarePaginator` for efficient offset-based pagination
+- Count queries use the same indexed paths as the data query (no separate full table scan)
 
-### Eager Loading
+### Eager Loading Strategy
 
-Every repository explicitly eager-loads only the relationship subsets needed:
+Every repository explicitly eager-loads only the relationship subsets needed for the response payload, avoiding N+1 queries:
 
 ```php
-// ArticleEloquentRepository
+// ArticleEloquentRepository — loads relationships used in ArticleResource
 $query->with(['category', 'tags']);
 
-// CategoryEloquentRepository  
+// CategoryEloquentRepository — uses withCount for the articles_count field
 $query->withCount('articles');
 
 // TagEloquentRepository
 $query->withCount('articles');
 ```
+
+**Key design decisions:**
+
+- `with()` is used when the full relationship data is serialized in the response (Article → Category, Article → Tags).
+- `withCount()` is used when only the count is needed (Category → articles_count, Tag → articles_count), avoiding loading thousands of related models into memory.
+- Comments are NOT eager-loaded on the article list endpoint because they're only used for filtering (via JOINs), not displayed in the list response.
+
+### Query Builder JOIN Strategy
+
+When relationship filters are applied (e.g., `filter[category][slug][eq]=laravel`), the `FilterableBuilder` performs explicit SQL JOINs instead of using subqueries:
+
+```sql
+-- filter[category][slug][eq]=laravel generates:
+SELECT DISTINCT articles.*
+FROM articles
+INNER JOIN categories ON categories.id = articles.category_id
+WHERE categories.slug = 'laravel'
+```
+
+```sql
+-- filter[comments][user][name][like]=John generates:
+SELECT DISTINCT articles.*
+FROM articles
+INNER JOIN comments ON comments.article_id = articles.id
+INNER JOIN users ON users.id = comments.user_id
+WHERE users.name LIKE '%John%'
+```
+
+The `DISTINCT` keyword prevents duplicate rows when a BelongsToMany JOIN (e.g., tags) matches multiple pivot records for the same article.
+
+### Scaling Considerations
+
+| Scale | Strategy |
+|-------|----------|
+| < 100K rows | Current Eloquent approach is optimal. Composite indexes handle all query patterns. |
+| 100K–1M rows | Add read replicas. Route all filter queries to a replica. Keep writes on primary. |
+| 1M–10M rows | Introduce Elasticsearch for full-text search. Keep relational filters on MySQL with optimized indexes. |
+| 10M+ rows | Full Elasticsearch migration. Move complex nested filters to ES nested queries. Use async indexing via Redis queue. |
+
+**At each scale threshold, the repository interface stays the same** — only the concrete implementation changes (Eloquent → Elasticsearch).
 
 ### Performance Telemetry Middleware
 
@@ -264,13 +327,17 @@ At scale (10M+ articles), MySQL/MariaDB full-text search becomes a bottleneck. L
 
 ---
 
-## API Endpoints
+## API Usage
+
+All endpoints accept the same query parameter structure. Base URL: `/api/v1/blog`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/blog/articles` | List articles with filters |
-| `GET` | `/api/blog/categories` | List categories with filters |
-| `GET` | `/api/blog/tags` | List tags with filters |
+| `GET` | `/api/v1/blog/articles` | List articles with filters |
+| `GET` | `/api/v1/blog/categories` | List categories with filters |
+| `GET` | `/api/v1/blog/tags` | List tags with filters |
+
+Full request examples (filtering, search, sorting, pagination, relationship filters, combined queries) are in [`api-tests.http`](api-tests.http) — open it in any HTTP client (VS Code REST Client, JetBrains, Insomnia) and run requests directly.
 
 ---
 
@@ -312,13 +379,14 @@ same `FieldFilter`, `RelationFilter`, etc. without depending on the Blog module.
 php artisan test --testsuite=Blog
 
 # Tests cover:
-# - Direct field filtering (eq, like, gt, gte, lt, lte, empty, filled, in)
+# - Direct field filtering (eq, like, gt, gte, lt, lte, neq, empty, filled, in)
 # - Relationship filtering (category.slug, tags.name, user.name)
 # - Deep nested relationship filtering (comments.user.name)
 # - Full-text global search
 # - Sorting (asc/desc)
 # - Pagination
 # - Combined multi-condition filters
+# - Edge cases (empty/null checks, IN with single value, date boundaries)
 ```
 
 All tests execute against an in-memory SQLite database via `RefreshDatabase`.

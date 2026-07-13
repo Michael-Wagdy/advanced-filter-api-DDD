@@ -18,6 +18,7 @@ class TagEloquentRepository implements TagRepositoryInterface
 
         $result = $builder
             ->whereFieldFilters($filters['filter'] ?? [], $builder->getRelationFields())
+            ->whereRelationFilters($filters['filter'] ?? [])
             ->whereSearch($filters['search'] ?? '', $builder->getSearchableColumns())
             ->applySort($filters['sort'] ?? null);
 
