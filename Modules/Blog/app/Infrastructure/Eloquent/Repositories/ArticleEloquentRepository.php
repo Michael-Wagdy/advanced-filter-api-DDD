@@ -14,6 +14,9 @@ use Modules\Blog\Infrastructure\Eloquent\Models\Article;
 
 class ArticleEloquentRepository implements ArticleRepositoryInterface
 {
+    private const SEARCHABLE_COLUMNS = ['title', 'body'];
+    private const RELATION_FIELDS = ['category', 'tags', 'comments', 'user'];
+
     public function __construct(
         protected Article $model,
     ) {}
@@ -26,15 +29,15 @@ class ArticleEloquentRepository implements ArticleRepositoryInterface
         $result = app(Pipeline::class)
             ->send($query)
             ->through([
-                FieldFilter::class,
-                RelationFilter::class,
-                SearchFilter::class,
-                SortFilter::class,
+                new FieldFilter($filters['filter'] ?? [], self::RELATION_FIELDS),
+                new RelationFilter($filters['filter'] ?? []),
+                new SearchFilter($filters['search'] ?? '', self::SEARCHABLE_COLUMNS),
+                new SortFilter($filters['sort'] ?? null),
             ])
             ->thenReturn();
 
-        $perPage = PaginationFilter::resolvePerPage();
+        $perPage = new PaginationFilter($filters['per_page'] ?? PaginationFilter::DEFAULT_PER_PAGE);
 
-        return $result->paginate($perPage);
+        return $result->paginate($perPage->resolvePerPage());
     }
 }

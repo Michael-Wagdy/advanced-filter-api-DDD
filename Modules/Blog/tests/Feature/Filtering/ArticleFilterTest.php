@@ -195,4 +195,79 @@ class ArticleFilterTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.title', 'PHP Testing Best Practices');
     }
+
+    public function test_filter_articles_by_created_at_gte(): void
+    {
+        $oldDate = now()->subDays(10)->toDateTimeString();
+        \Illuminate\Support\Facades\DB::table('articles')
+            ->where('id', $this->articles[0]->id)
+            ->update(['created_at' => $oldDate]);
+
+        $recentDate = now()->subDays(1)->toDateTimeString();
+        $response = $this->getJson(self::ENDPOINT . '?filter[created_at][gte]=' . $recentDate);
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        $titles = array_column($response->json('data'), 'title');
+        $this->assertNotContains('Laravel Advanced Filtering Guide', $titles);
+    }
+
+    public function test_filter_articles_by_created_at_between(): void
+    {
+        $base = now()->subDays(3)->startOfDay();
+        \Illuminate\Support\Facades\DB::table('articles')
+            ->whereIn('id', [$this->articles[0]->id, $this->articles[1]->id, $this->articles[2]->id])
+            ->update(['created_at' => $base->copy()->subDays(5)->toDateTimeString()]);
+
+        \Illuminate\Support\Facades\DB::table('articles')
+            ->where('id', $this->articles[1]->id)
+            ->update(['created_at' => $base->copy()->addDay(1)->toDateTimeString()]);
+
+        \Illuminate\Support\Facades\DB::table('articles')
+            ->where('id', $this->articles[2]->id)
+            ->update(['created_at' => $base->copy()->addDays(3)->toDateTimeString()]);
+
+        $from = $base->copy()->addHours(12)->toDateTimeString();
+        $to = $base->copy()->addDays(4)->toDateTimeString();
+
+        $response = $this->getJson(self::ENDPOINT . "?filter[created_at][gte]={$from}&filter[created_at][lte]={$to}");
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data');
+    }
+
+    public function test_filter_articles_empty_operator_returns_null_excerpt(): void
+    {
+        $this->articles[0]->update(['excerpt' => 'Has an excerpt']);
+        $this->articles[1]->update(['excerpt' => null]);
+        $this->articles[2]->update(['excerpt' => null]);
+
+        $response = $this->getJson(self::ENDPOINT . '?filter[excerpt][empty]=1');
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data');
+    }
+
+    public function test_filter_articles_filled_operator_returns_non_null_excerpt(): void
+    {
+        $this->articles[0]->update(['excerpt' => 'Has an excerpt']);
+        $this->articles[1]->update(['excerpt' => null]);
+        $this->articles[2]->update(['excerpt' => null]);
+
+        $response = $this->getJson(self::ENDPOINT . '?filter[excerpt][filled]=1');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Laravel Advanced Filtering Guide');
+    }
+
+    public function test_filter_by_nested_relation_dot_notation(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[comments.user.name][like]=John');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'Laravel Advanced Filtering Guide');
+    }
 }

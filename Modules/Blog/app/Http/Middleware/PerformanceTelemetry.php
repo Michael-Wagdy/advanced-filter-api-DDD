@@ -5,7 +5,6 @@ namespace Modules\Blog\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Memory;
 use Symfony\Component\HttpFoundation\Response;
 
 class PerformanceTelemetry
@@ -16,11 +15,10 @@ class PerformanceTelemetry
             return $next($request);
         }
 
-        $startMemory = memory_get_usage(true);
         $queryCount = 0;
         $queryTime = 0;
 
-        $listener = DB::listen(function ($query) use (&$queryCount, &$queryTime) {
+        DB::listen(function ($query) use (&$queryCount, &$queryTime) {
             $queryCount++;
             $queryTime += $query->time / 1000;
         });
@@ -31,13 +29,13 @@ class PerformanceTelemetry
         $response = $next($request);
 
         $totalTime = round((microtime(true) - $startTime) * 1000, 2);
-        $endMemory = memory_get_usage(true);
+        $memoryUsed = memory_get_usage(false);
         $peakMemory = memory_get_peak_usage(true);
 
         $response->headers->set('X-Request-Time', "{$totalTime}ms");
         $response->headers->set('X-Db-Query-Count', (string) $queryCount);
         $response->headers->set('X-Db-Query-Time', round($queryTime * 1000, 2) . 'ms');
-        $response->headers->set('X-Memory-Used', $this->formatBytes($endMemory - $startMemory));
+        $response->headers->set('X-Memory-Used', $this->formatBytes($memoryUsed));
         $response->headers->set('X-Memory-Peak', $this->formatBytes($peakMemory));
 
         return $response;

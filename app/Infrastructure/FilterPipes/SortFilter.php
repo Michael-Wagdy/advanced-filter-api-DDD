@@ -7,28 +7,25 @@ use Illuminate\Database\Eloquent\Builder;
 
 class SortFilter
 {
-    private const DIRECTION_MAP = [
-        '-' => 'DESC',
-        '+' => 'ASC',
-    ];
+    public function __construct(
+        protected ?string $sortParam,
+    ) {}
 
     public function handle(Builder $query, Closure $next): Builder
     {
-        $sort = request()->input('sort');
-
-        if (!$sort || trim($sort) === '') {
+        if (!$this->sortParam || trim($this->sortParam) === '') {
             return $next($query);
         }
 
         $direction = 'ASC';
-        $column = $sort;
+        $column = $this->sortParam;
 
-        if (str_starts_with($sort, '-')) {
+        if (str_starts_with($this->sortParam, '-')) {
             $direction = 'DESC';
-            $column = substr($sort, 1);
-        } elseif (str_starts_with($sort, '+')) {
+            $column = substr($this->sortParam, 1);
+        } elseif (str_starts_with($this->sortParam, '+')) {
             $direction = 'ASC';
-            $column = substr($sort, 1);
+            $column = substr($this->sortParam, 1);
         }
 
         $table = $query->getModel()->getTable();

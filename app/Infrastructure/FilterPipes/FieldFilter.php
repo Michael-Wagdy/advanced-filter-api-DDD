@@ -20,15 +20,17 @@ class FieldFilter
         'filled' => 'IS_NOT_NULL',
     ];
 
+    public function __construct(
+        protected array $fieldFilters,
+        protected array $relationFields,
+    ) {}
+
     public function handle(Builder $query, Closure $next): Builder
     {
-        $fieldFilters = request()->input('filter', []);
-        $model = $query->getModel();
-        $columns = $model->getFillable();
-        $table = $model->getTable();
+        $table = $query->getModel()->getTable();
 
-        foreach ($fieldFilters as $field => $conditions) {
-            if (in_array($field, ['category', 'tags', 'comments', 'user'])) {
+        foreach ($this->fieldFilters as $field => $conditions) {
+            if (str_contains($field, '.') || in_array($field, $this->relationFields)) {
                 continue;
             }
 

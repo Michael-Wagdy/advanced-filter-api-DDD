@@ -8,35 +8,27 @@ use Illuminate\Support\Facades\DB;
 
 class SearchFilter
 {
+    public function __construct(
+        protected string $searchTerm,
+        protected array $searchableColumns,
+    ) {}
+
     public function handle(Builder $query, Closure $next): Builder
     {
-        $search = request()->input('search');
-
-        if (!$search || trim($search) === '') {
+        if ($this->searchTerm === '' || empty($this->searchableColumns)) {
             return $next($query);
         }
 
-        $searchTerm = trim($search);
         $driver = DB::connection()->getDriverName();
 
-        $modelName = class_basename($query->getModel());
-
-        if ($modelName === 'Article' && in_array($driver, ['mysql', 'mariadb'])) {
-            $query->whereFullText(['title', 'body'], $searchTerm);
-        } elseif ($modelName === 'Category' && in_array($driver, ['mysql', 'mariadb'])) {
-            $query->whereFullText(['name', 'description'], $searchTerm);
-        } elseif ($modelName === 'Article') {
-            $query->where(function (Builder $q) use ($searchTerm) {
-                $q->where('title', 'LIKE', "%{$searchTerm}%")
-                    ->orWhere('body', 'LIKE', "%{$searchTerm}%");
+        if (in_array($driver, ['mysql', 'mariadb'])) {
+            $query->whereFullText($this->searchableColumns, $this->searchTerm);
+        } else {
+            $query->where(function (Builder $q) {
+                foreach ($this->searchableColumns as $column) {
+                    $q->orWhere($column, 'LIKE', "%{$this->searchTerm}%");
+                }
             });
-        } elseif ($modelName === 'Category') {
-            $query->where(function (Builder $q) use ($searchTerm) {
-                $q->where('name', 'LIKE', "%{$searchTerm}%")
-                    ->orWhere('description', 'LIKE', "%{$searchTerm}%");
-            });
-        } elseif ($modelName === 'Tag') {
-            $query->where('name', 'LIKE', "%{$searchTerm}%");
         }
 
         return $next($query);

@@ -13,6 +13,9 @@ use Modules\Blog\Infrastructure\Eloquent\Models\Category;
 
 class CategoryEloquentRepository implements CategoryRepositoryInterface
 {
+    private const SEARCHABLE_COLUMNS = ['name', 'description'];
+    private const RELATION_FIELDS = ['articles'];
+
     public function __construct(
         protected Category $model,
     ) {}
@@ -25,14 +28,14 @@ class CategoryEloquentRepository implements CategoryRepositoryInterface
         $result = app(Pipeline::class)
             ->send($query)
             ->through([
-                FieldFilter::class,
-                SearchFilter::class,
-                SortFilter::class,
+                new FieldFilter($filters['filter'] ?? [], self::RELATION_FIELDS),
+                new SearchFilter($filters['search'] ?? '', self::SEARCHABLE_COLUMNS),
+                new SortFilter($filters['sort'] ?? null),
             ])
             ->thenReturn();
 
-        $perPage = PaginationFilter::resolvePerPage();
+        $perPage = new PaginationFilter($filters['per_page'] ?? PaginationFilter::DEFAULT_PER_PAGE);
 
-        return $result->paginate($perPage);
+        return $result->paginate($perPage->resolvePerPage());
     }
 }

@@ -13,6 +13,9 @@ use Modules\Blog\Infrastructure\Eloquent\Models\Tag;
 
 class TagEloquentRepository implements TagRepositoryInterface
 {
+    private const SEARCHABLE_COLUMNS = ['name'];
+    private const RELATION_FIELDS = ['articles'];
+
     public function __construct(
         protected Tag $model,
     ) {}
@@ -25,14 +28,14 @@ class TagEloquentRepository implements TagRepositoryInterface
         $result = app(Pipeline::class)
             ->send($query)
             ->through([
-                FieldFilter::class,
-                SearchFilter::class,
-                SortFilter::class,
+                new FieldFilter($filters['filter'] ?? [], self::RELATION_FIELDS),
+                new SearchFilter($filters['search'] ?? '', self::SEARCHABLE_COLUMNS),
+                new SortFilter($filters['sort'] ?? null),
             ])
             ->thenReturn();
 
-        $perPage = PaginationFilter::resolvePerPage();
+        $perPage = new PaginationFilter($filters['per_page'] ?? PaginationFilter::DEFAULT_PER_PAGE);
 
-        return $result->paginate($perPage);
+        return $result->paginate($perPage->resolvePerPage());
     }
 }

@@ -94,11 +94,8 @@ class BlogDatabaseSeeder extends Seeder
         $tags = [];
         $slugs = [];
         for ($i = 0; $i < self::TAG_COUNT; $i++) {
-            $name = fake()->unique()->word();
-            $slug = str($name)->slug()->toString();
-            if (in_array($slug, $slugs)) {
-                $slug = $slug . '-' . $i;
-            }
+            $name = fake()->unique()->words(2, true);
+            $slug = str($name)->slug()->toString() . '-' . $i;
             $slugs[] = $slug;
 
             $tags[] = [
@@ -123,7 +120,7 @@ class BlogDatabaseSeeder extends Seeder
         $inserted = 0;
 
         for ($i = 1; $i <= $total; $i++) {
-            $title = fake()->unique()->sentence(4);
+            $title = fake()->sentence(4);
             $slug = str($title)->slug()->toString() . '-' . $i;
             $now = now()->toDateTimeString();
 
