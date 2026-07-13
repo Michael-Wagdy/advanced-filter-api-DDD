@@ -2,6 +2,11 @@
 
 A production-grade Laravel 13 application implementing an Advanced Filtering System using strict Domain-Driven Design (DDD), the Pipeline pattern, and modular architecture via `nwidart/laravel-modules`.
 
+Two modules:
+
+- **Blog** — Articles, Categories, Tags with relationships and list APIs.
+- **Shared** — Reusable filter pipes, middleware, and cross-cutting infrastructure used by all modules.
+
 ---
 
 ## Architectural Layout
@@ -9,25 +14,34 @@ A production-grade Laravel 13 application implementing an Advanced Filtering Sys
 ### DDD Layer Separation
 
 ```
-Modules/Blog/
+Modules/Shared/                       ← Shared Infrastructure
 ├── app/
-│   ├── Http/                    ← Application Layer
-│   │   ├── Controllers/Blog/    ← Orchestration only
-│   │   ├── Middleware/           ← Cross-cutting concerns
-│   │   └── Resources/           ← Outbound JSON transformation
-│   ├── Domain/                  ← Domain Layer
-│   │   ├── Services/            ← Business logic orchestration
-│   │   └── Repositories/        ← Abstract contracts (interfaces)
-│   └── Infrastructure/          ← Infrastructure Layer
+│   ├── Http/Middleware/              ← Cross-cutting concerns (PerformanceTelemetry)
+│   └── Infrastructure/FilterPipes/  ← Reusable Pipeline filter classes
+│       ├── FieldFilter.php
+│       ├── RelationFilter.php
+│       ├── SearchFilter.php
+│       ├── SortFilter.php
+│       └── PaginationFilter.php
+└── Providers/                        ← Module service provider
+
+Modules/Blog/                         ← Domain Module
+├── app/
+│   ├── Http/                         ← Application Layer
+│   │   ├── Controllers/Blog/         ← Orchestration only
+│   │   └── Resources/               ← Outbound JSON transformation
+│   ├── Domain/                       ← Domain Layer
+│   │   ├── Services/                 ← Business logic orchestration
+│   │   └── Repositories/             ← Abstract contracts (interfaces)
+│   └── Infrastructure/               ← Infrastructure Layer
 │       └── Eloquent/
-│           ├── Models/          ← Skinny Eloquent models
-│           ├── Repositories/    ← Concrete query implementations
-│           └── FilterPipes/     ← Reusable Pipeline filter classes
+│           ├── Models/               ← Skinny Eloquent models
+│           └── Repositories/         ← Concrete query implementations
 ├── database/
-│   ├── factories/               ← SRP: one factory per entity
-│   ├── migrations/              ← Schema + composite/fulltext indexes
-│   └── seeders/                 ← High-speed bulk insert seeder
-└── tests/Feature/               ← Integration tests
+│   ├── factories/                    ← SRP: one factory per entity
+│   ├── migrations/                   ← Schema + composite/fulltext indexes
+│   └── seeders/                      ← High-speed bulk insert seeder
+└── tests/Feature/                    ← Integration tests
 ```
 
 ### Pipeline Filter Architecture
@@ -257,6 +271,37 @@ At scale (10M+ articles), MySQL/MariaDB full-text search becomes a bottleneck. L
 | `GET` | `/api/blog/articles` | List articles with filters |
 | `GET` | `/api/blog/categories` | List categories with filters |
 | `GET` | `/api/blog/tags` | List tags with filters |
+
+---
+
+## Design Notes
+
+### Why Not Full Polymorphism?
+
+This implementation uses standard Eloquent relationships (`BelongsTo`, `HasMany`, `BelongsToMany`)
+for Article ↔ Category, Article ↔ Tag, and Article ↔ Comment. The natural next step would be
+to create additional domain modules — for example `Modules/Shop` with Books or Products — and
+make Category, Tag, and Comment fully polymorphic (`categorizable`, `taggable`, `commentable`)
+so they can serve any module. However, to reduce complexity while still meeting the assessment
+requirements, I chose to consolidate the shared infrastructure into a `Modules/Shared` module
+instead of spinning up extra domain modules.
+
+If the system needed to support Books, Courses, or other content types in the future, the
+following would become morphable:
+
+- **Tags** → `taggable_type` + `taggable_id` — Tags can belong to Articles, Books, etc.
+- **Categories** → `categorizable_type` + `categorizable_id` — Categories can classify anything.
+- **Comments** → `commentable_type` + `commentable_id` — Comments on Articles, Books, etc.
+
+The pipeline architecture (`FieldFilter → RelationFilter → SearchFilter → SortFilter`) is
+designed to work unchanged with polymorphic relations — only the model relationships and
+migrations would need updating.
+
+### Module Boundaries
+
+The **Shared** module exists so that filter pipes and middleware are not duplicated when
+new domain modules are added. Any future module (e.g., `Modules/Shop`) can import the
+same `FieldFilter`, `RelationFilter`, etc. without depending on the Blog module.
 
 ---
 

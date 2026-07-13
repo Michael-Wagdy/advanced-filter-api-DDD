@@ -146,6 +146,7 @@ class BlogDatabaseSeeder extends Seeder
                 }
 
                 $batch = [];
+                gc_collect_cycles();
             }
         }
 
@@ -183,6 +184,7 @@ class BlogDatabaseSeeder extends Seeder
             if (count($batch) >= self::CHUNK_SIZE) {
                 DB::table('article_tag')->insert($batch);
                 $batch = [];
+                gc_collect_cycles();
             }
         }
 
@@ -217,6 +219,7 @@ class BlogDatabaseSeeder extends Seeder
             if (count($batch) >= self::CHUNK_SIZE) {
                 DB::table('comments')->insert($batch);
                 $batch = [];
+                gc_collect_cycles();
             }
         }
 

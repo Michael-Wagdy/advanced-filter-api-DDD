@@ -10,7 +10,7 @@ use Modules\Blog\Domain\Repositories\TagRepositoryInterface;
 use Modules\Blog\Infrastructure\Eloquent\Repositories\ArticleEloquentRepository;
 use Modules\Blog\Infrastructure\Eloquent\Repositories\CategoryEloquentRepository;
 use Modules\Blog\Infrastructure\Eloquent\Repositories\TagEloquentRepository;
-use Modules\Blog\Http\Middleware\PerformanceTelemetry;
+use Modules\Shared\Http\Middleware\PerformanceTelemetry;
 
 class BlogServiceProvider extends ModuleServiceProvider
 {

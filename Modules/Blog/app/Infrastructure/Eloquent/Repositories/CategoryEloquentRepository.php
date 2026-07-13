@@ -2,40 +2,27 @@
 
 namespace Modules\Blog\Infrastructure\Eloquent\Repositories;
 
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Pipeline\Pipeline;
+use Modules\Blog\Domain\DTOs\FilterResult;
 use Modules\Blog\Domain\Repositories\CategoryRepositoryInterface;
-use App\Infrastructure\FilterPipes\FieldFilter;
-use App\Infrastructure\FilterPipes\PaginationFilter;
-use App\Infrastructure\FilterPipes\SearchFilter;
-use App\Infrastructure\FilterPipes\SortFilter;
 use Modules\Blog\Infrastructure\Eloquent\Models\Category;
 
 class CategoryEloquentRepository implements CategoryRepositoryInterface
 {
-    private const SEARCHABLE_COLUMNS = ['name', 'description'];
-    private const RELATION_FIELDS = ['articles'];
-
     public function __construct(
         protected Category $model,
     ) {}
 
-    public function filter(array $filters): LengthAwarePaginator
+    public function filter(array $filters): FilterResult
     {
-        $query = $this->model->newQuery()
-            ->withCount('articles');
+        $builder = $this->model->newQuery()->withDefaultEagerLoads();
 
-        $result = app(Pipeline::class)
-            ->send($query)
-            ->through([
-                new FieldFilter($filters['filter'] ?? [], self::RELATION_FIELDS),
-                new SearchFilter($filters['search'] ?? '', self::SEARCHABLE_COLUMNS),
-                new SortFilter($filters['sort'] ?? null),
-            ])
-            ->thenReturn();
+        $result = $builder
+            ->whereFieldFilters($filters['filter'] ?? [], $builder->getRelationFields())
+            ->whereSearch($filters['search'] ?? '', $builder->getSearchableColumns())
+            ->applySort($filters['sort'] ?? null);
 
-        $perPage = new PaginationFilter($filters['per_page'] ?? PaginationFilter::DEFAULT_PER_PAGE);
+        $perPage = $filters['per_page'] ?? 15;
 
-        return $result->paginate($perPage->resolvePerPage());
+        return new FilterResult($result->paginate((int) $perPage));
     }
 }

@@ -4,6 +4,7 @@ namespace Modules\Blog\Http\Controllers\Blog;
 
 use App\Http\Controllers\Controller;
 use Modules\Blog\Domain\Services\ArticleFilterDomainService;
+use Modules\Blog\Http\Requests\FilterArticlesRequest;
 use Modules\Blog\Http\Resources\ArticleResource;
 
 class ArticleController extends Controller
@@ -12,12 +13,12 @@ class ArticleController extends Controller
         protected ArticleFilterDomainService $service,
     ) {}
 
-    public function index()
+    public function index(FilterArticlesRequest $request)
     {
-        $filters = request()->only(['filter', 'search', 'sort', 'per_page']);
+        $filters = $request->only(['filter', 'search', 'sort', 'per_page']);
 
-        $articles = $this->service->applyFilters($filters);
+        $result = $this->service->applyFilters($filters);
 
-        return ArticleResource::collection($articles);
+        return ArticleResource::collection($result->paginator);
     }
 }

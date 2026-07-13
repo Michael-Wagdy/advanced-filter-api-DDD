@@ -78,7 +78,7 @@ class CategoryFilterTest extends TestCase
 
     public function test_filter_categories_by_like_name(): void
     {
-        $response = $this->getJson(self::ENDPOINT . '?filter[name][like]=PHP');
+        $response = $this->getJson(self::ENDPOINT . '?filter[name][like]=Legac');
 
         $response->assertOk()
             ->assertJsonCount(1, 'data');

@@ -2,7 +2,7 @@
 
 namespace Modules\Blog\Domain\Services;
 
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Modules\Blog\Domain\DTOs\FilterResult;
 use Modules\Blog\Domain\Repositories\ArticleRepositoryInterface;
 
 class ArticleFilterDomainService
@@ -11,7 +11,7 @@ class ArticleFilterDomainService
         protected ArticleRepositoryInterface $repository,
     ) {}
 
-    public function applyFilters(array $validatedFilters): LengthAwarePaginator
+    public function applyFilters(array $validatedFilters): FilterResult
     {
         return $this->repository->filter($validatedFilters);
     }

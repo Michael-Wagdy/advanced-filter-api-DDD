@@ -25,11 +25,11 @@ return new class extends Migration
             $table->index(['category_id', 'status']);
             $table->index(['user_id', 'created_at']);
             $table->index(['view_count']);
-        });
 
-        if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'])) {
-            DB::statement('ALTER TABLE articles ADD FULLTEXT INDEX ft_articles_title_body (title, body)');
-        }
+            if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'])) {
+                $table->fullText(['title', 'body']);
+            }
+        });
     }
 
     public function down(): void

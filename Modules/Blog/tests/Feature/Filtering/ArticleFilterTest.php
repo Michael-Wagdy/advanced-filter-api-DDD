@@ -187,6 +187,14 @@ class ArticleFilterTest extends TestCase
             ->assertJsonCount(0, 'data');
     }
 
+    public function test_filter_articles_by_multiple_statuses_in(): void
+    {
+        $response = $this->getJson(self::ENDPOINT . '?filter[status][in]=published,draft');
+
+        $response->assertOk()
+            ->assertJsonCount(3, 'data');
+    }
+
     public function test_combined_filters(): void
     {
         $response = $this->getJson(self::ENDPOINT . '?filter[status][eq]=published&filter[view_count][gt]=2000&sort=-view_count');

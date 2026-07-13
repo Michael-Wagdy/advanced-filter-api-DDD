@@ -2,9 +2,9 @@
 
 namespace Modules\Blog\Domain\Repositories;
 
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Modules\Blog\Domain\DTOs\FilterResult;
 
 interface ArticleRepositoryInterface
 {
-    public function filter(array $filters): LengthAwarePaginator;
+    public function filter(array $filters): FilterResult;
 }

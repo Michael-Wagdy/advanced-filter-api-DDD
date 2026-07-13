@@ -25,6 +25,7 @@
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/",
+            "Modules\\Shared\\": "Modules/Shared/app/",
             "Modules\\Blog\\": "Modules/Blog/app/",
             "Modules\\Blog\\Database\\Factories\\": "Modules/Blog/database/factories/",
             "Modules\\Blog\\Database\\Seeders\\": "Modules/Blog/database/seeders/"

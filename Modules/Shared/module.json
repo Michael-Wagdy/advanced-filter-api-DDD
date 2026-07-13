@@ -1,0 +1,11 @@
+{
+    "name": "Shared",
+    "alias": "shared",
+    "description": "Common application infrastructure: filter pipes, middleware, and utilities.",
+    "keywords": [],
+    "priority": -1,
+    "providers": [
+        "Modules\\Shared\\Providers\\SharedServiceProvider"
+    ],
+    "files": []
+}

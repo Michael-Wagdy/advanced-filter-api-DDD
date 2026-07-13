@@ -4,6 +4,7 @@ namespace Modules\Blog\Http\Controllers\Blog;
 
 use App\Http\Controllers\Controller;
 use Modules\Blog\Domain\Services\CategoryFilterDomainService;
+use Modules\Blog\Http\Requests\FilterCategoriesRequest;
 use Modules\Blog\Http\Resources\CategoryResource;
 
 class CategoryController extends Controller
@@ -12,12 +13,12 @@ class CategoryController extends Controller
         protected CategoryFilterDomainService $service,
     ) {}
 
-    public function index()
+    public function index(FilterCategoriesRequest $request)
     {
-        $filters = request()->only(['filter', 'search', 'sort', 'per_page']);
+        $filters = $request->only(['filter', 'search', 'sort', 'per_page']);
 
-        $categories = $this->service->applyFilters($filters);
+        $result = $this->service->applyFilters($filters);
 
-        return CategoryResource::collection($categories);
+        return CategoryResource::collection($result->paginator);
     }
 }
