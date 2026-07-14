@@ -2,28 +2,14 @@
 
 namespace Modules\Blog\Infrastructure\Eloquent\Repositories;
 
-use Modules\Blog\Domain\DTOs\FilterResult;
 use Modules\Blog\Domain\Repositories\TagRepositoryInterface;
 use Modules\Blog\Infrastructure\Eloquent\Models\Tag;
+use Modules\Shared\Infrastructure\Eloquent\FilterableRepository;
 
-class TagEloquentRepository implements TagRepositoryInterface
+class TagEloquentRepository extends FilterableRepository implements TagRepositoryInterface
 {
-    public function __construct(
-        protected Tag $model,
-    ) {}
-
-    public function filter(array $filters): FilterResult
+    public function __construct(Tag $model)
     {
-        $builder = $this->model->newQuery()->withDefaultEagerLoads();
-
-        $result = $builder
-            ->whereFieldFilters($filters['filter'] ?? [], $builder->getRelationFields())
-            ->whereRelationFilters($filters['filter'] ?? [])
-            ->whereSearch($filters['search'] ?? '', $builder->getSearchableColumns())
-            ->applySort($filters['sort'] ?? null);
-
-        $perPage = $filters['per_page'] ?? 15;
-
-        return new FilterResult($result->paginate((int) $perPage));
+        parent::__construct($model);
     }
 }
